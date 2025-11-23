@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // USERS
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Only allow users to read/write their own user doc
+    }
+
+    // COMPLAINTS
+    match /complaints/{complaintId} {
+      // Allow all authenticated users to read and write complaints
+      // Filtering is handled securely on the client side
+      allow read, write: if request.auth != null;
+    }
+
+    // Legacy collection (Allowed same as before)
+    match /grievances/{grievanceId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
