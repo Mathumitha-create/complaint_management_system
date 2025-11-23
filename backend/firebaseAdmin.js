@@ -1,4 +1,6 @@
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 let db = null;
@@ -23,19 +25,30 @@ try {
         console.log('🔥 Firebase Admin Initialized Successfully (Environment Variables)');
     } else {
         // Try to use serviceAccountKey.json (for local development)
-        console.log('🔧 Attempting to use serviceAccountKey.json...');
-        const serviceAccount = require('./serviceAccountKey.json');
+        const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
 
-        if (serviceAccount.note) {
-            console.log('ℹ️  Running in Offline Mode (Database features disabled)');
-            console.log('   (Add serviceAccountKey.json or set environment variables to enable database)');
+        if (fs.existsSync(serviceAccountPath)) {
+            console.log('🔧 Attempting to use serviceAccountKey.json...');
+            const serviceAccount = require('./serviceAccountKey.json');
+
+            if (serviceAccount.note) {
+                console.log('ℹ️  Running in Offline Mode (Database features disabled)');
+                console.log('   (Add serviceAccountKey.json or set environment variables to enable database)');
+            } else {
+                admin.initializeApp({
+                    credential: admin.credential.cert(serviceAccount)
+                });
+                db = admin.firestore();
+                auth = admin.auth();
+                console.log('🔥 Firebase Admin Initialized Successfully (Service Account File)');
+            }
         } else {
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount)
-            });
-            db = admin.firestore();
-            auth = admin.auth();
-            console.log('🔥 Firebase Admin Initialized Successfully (Service Account File)');
+            console.warn('⚠️  No Firebase credentials found!');
+            console.log('ℹ️  Please set environment variables:');
+            console.log('   - FIREBASE_PROJECT_ID');
+            console.log('   - FIREBASE_PRIVATE_KEY');
+            console.log('   - FIREBASE_CLIENT_EMAIL');
+            console.log('   OR add serviceAccountKey.json file for local development');
         }
     }
 } catch (error) {
