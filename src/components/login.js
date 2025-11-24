@@ -1,6 +1,7 @@
 // Login component using Backend Verification
 import React, { useState } from "react";
 import { auth } from "../firebase";
+import API_BASE from "../config";
 import {
   signInWithCustomToken,
   GoogleAuthProvider,
@@ -28,7 +29,7 @@ const Login = ({ onShowSignup }) => {
       console.log("🔐 Google Sign-In successful. Verifying with backend...");
 
       // Call Backend API to Verify Google Token & Get Role
-      const response = await fetch("http://localhost:5000/api/auth/google", {
+      const response = await fetch(`${API_BASE}/api/auth/google`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
@@ -61,7 +62,7 @@ const Login = ({ onShowSignup }) => {
       console.log(`🔐 Attempting login as ${selectedRole}...`);
 
       // 1. Call Backend API to Verify Credentials & Role
-      const response = await fetch("http://localhost:5000/api/auth/login", {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

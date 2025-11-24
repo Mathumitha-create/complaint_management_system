@@ -1,5 +1,6 @@
 // Student dashboard: Submit form and list grievances
 import React, { useState, useEffect } from "react";
+import API_BASE from "../config";
 import GrievanceForm from "./GrievanceForm";
 import { auth } from "../firebase";
 import { useTranslation } from "../hooks/useTranslation";
@@ -42,7 +43,9 @@ const StudentDashboard = ({ user }) => {
     const fetchComplaints = async () => {
       try {
         console.log("📡 Fetching complaints from Backend API...");
-        const response = await fetch(`http://localhost:5000/api/complaints/student/${user.uid}`);
+        const response = await fetch(
+          `${API_BASE}/api/complaints/student/${user.uid}`
+        );
 
         if (!response.ok) {
           throw new Error(`API Error: ${response.statusText}`);
@@ -57,13 +60,17 @@ const StudentDashboard = ({ user }) => {
             id: d.id,
             ...d,
             // Map 'resolved' boolean to 'status' string
-            status: d.resolved ? "Resolved" : (d.escalated ? "Escalated" : "Pending"),
+            status: d.resolved
+              ? "Resolved"
+              : d.escalated
+              ? "Escalated"
+              : "Pending",
             // Map 'createdAt' (ISO string) to 'created_at' (Date object or keep string)
             created_at: d.createdAt ? new Date(d.createdAt) : new Date(),
             updated_at: d.resolvedAt ? new Date(d.resolvedAt) : new Date(),
             // Ensure title exists (Backend stores description only)
             title: d.category || "Complaint",
-            description: d.description
+            description: d.description,
           };
         });
 
@@ -75,11 +82,15 @@ const StudentDashboard = ({ user }) => {
 
         // Update Stats
         const total = grievanceData.length;
-        const resolved = grievanceData.filter((g) => g.status === "Resolved").length;
+        const resolved = grievanceData.filter(
+          (g) => g.status === "Resolved"
+        ).length;
         const open = grievanceData.filter((g) => g.status === "Pending").length;
 
         // Calculate Avg Resolution Time
-        const resolvedGrievances = grievanceData.filter((g) => g.status === "Resolved");
+        const resolvedGrievances = grievanceData.filter(
+          (g) => g.status === "Resolved"
+        );
         let totalDays = 0;
         resolvedGrievances.forEach((g) => {
           if (g.created_at && g.updated_at) {
@@ -88,10 +99,11 @@ const StudentDashboard = ({ user }) => {
             totalDays += diffDays;
           }
         });
-        const avgDays = resolvedGrievances.length ? Math.round(totalDays / resolvedGrievances.length) : 0;
+        const avgDays = resolvedGrievances.length
+          ? Math.round(totalDays / resolvedGrievances.length)
+          : 0;
 
         setStats({ total, resolved, open, avgResolutionDays: avgDays });
-
       } catch (error) {
         console.error("❌ Error fetching complaints:", error);
         setStats((prev) => ({ ...prev, error: error.message }));
@@ -103,7 +115,6 @@ const StudentDashboard = ({ user }) => {
     // Poll every 10 seconds for updates (since we removed real-time listener)
     const interval = setInterval(fetchComplaints, 10000);
     return () => clearInterval(interval);
-
   }, [user]);
 
   useEffect(() => {
@@ -152,18 +163,18 @@ const StudentDashboard = ({ user }) => {
       // Prepare payload for Backend API
       const payload = {
         studentId: user.uid,
-        studentName: user.displayName || user.email.split('@')[0] || "Student",
+        studentName: user.displayName || user.email.split("@")[0] || "Student",
         studentEmail: user.email,
         registerNumber: user.uid.substring(0, 8).toUpperCase(), // Fallback if not available
         category: data.category,
         description: `${data.title}\n\n${data.description}`, // Combine title and description
         hostelType: data.hostelType || "Boys Hostel", // Default to Boys Hostel if missing
-        resolutionTime: resolutionDays
+        resolutionTime: resolutionDays,
       };
 
       console.log("🚀 Sending complaint to Backend API:", payload);
 
-      const response = await fetch("http://localhost:5000/api/complaints/create", {
+      const response = await fetch(`${API_BASE}/api/complaints/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -182,10 +193,12 @@ const StudentDashboard = ({ user }) => {
       // Immediately switch to My Grievances tab
       setActiveTab("myGrievances");
       return { success: true, id: result.complaintId };
-
     } catch (error) {
       console.error("❌ Error submitting grievance (API):", error);
-      return { success: false, error: error.message || "Network error connecting to backend" };
+      return {
+        success: false,
+        error: error.message || "Network error connecting to backend",
+      };
     }
   };
 
@@ -218,8 +231,12 @@ const StudentDashboard = ({ user }) => {
           <div className="stat-value">{stats.open}</div>
         </div>
         <div className="stat-card">
-          <h3><TranslatedText text="Avg. Resolution Time" /></h3>
-          <div className="stat-value">{stats.avgResolutionDays} {t("days") || "Days"}</div>
+          <h3>
+            <TranslatedText text="Avg. Resolution Time" />
+          </h3>
+          <div className="stat-value">
+            {stats.avgResolutionDays} {t("days") || "Days"}
+          </div>
         </div>
       </div>
 
@@ -244,7 +261,9 @@ const StudentDashboard = ({ user }) => {
     if (!user) {
       return (
         <div style={{ padding: "20px", textAlign: "center" }}>
-          <p style={{ margin: 0 }}><TranslatedText text="Loading user session..." /></p>
+          <p style={{ margin: 0 }}>
+            <TranslatedText text="Loading user session..." />
+          </p>
         </div>
       );
     }
@@ -299,8 +318,9 @@ const StudentDashboard = ({ user }) => {
             {t("pending")}
           </button>
           <button
-            className={`filter-btn ${statusFilter === "In Progress" && "active"
-              }`}
+            className={`filter-btn ${
+              statusFilter === "In Progress" && "active"
+            }`}
             onClick={() => setStatusFilter("In Progress")}
           >
             {t("in_progress")}
@@ -364,13 +384,23 @@ const StudentDashboard = ({ user }) => {
   return (
     <div className="dashboard-container">
       <div className="sidebar">
-        <div className="sidebar-brand"><TranslatedText text="GRIEVANCE CELL" /></div>
+        <div className="sidebar-brand">
+          <TranslatedText text="GRIEVANCE CELL" />
+        </div>
         <ul className="sidebar-menu">
           <li className="sidebar-item">
             <button
               onClick={() => setActiveTab("summary")}
-              className={`sidebar-link ${activeTab === "summary" ? "active" : ""}`}
-              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+              className={`sidebar-link ${
+                activeTab === "summary" ? "active" : ""
+              }`}
+              style={{
+                background: "none",
+                border: "none",
+                width: "100%",
+                textAlign: "left",
+                cursor: "pointer",
+              }}
             >
               <svg
                 className="sidebar-icon"
@@ -385,8 +415,16 @@ const StudentDashboard = ({ user }) => {
           <li className="sidebar-item">
             <button
               onClick={() => setActiveTab("submitGrievance")}
-              className={`sidebar-link ${activeTab === "submitGrievance" ? "active" : ""}`}
-              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+              className={`sidebar-link ${
+                activeTab === "submitGrievance" ? "active" : ""
+              }`}
+              style={{
+                background: "none",
+                border: "none",
+                width: "100%",
+                textAlign: "left",
+                cursor: "pointer",
+              }}
             >
               <svg
                 className="sidebar-icon"
@@ -401,8 +439,16 @@ const StudentDashboard = ({ user }) => {
           <li className="sidebar-item">
             <button
               onClick={() => setActiveTab("myGrievances")}
-              className={`sidebar-link ${activeTab === "myGrievances" ? "active" : ""}`}
-              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+              className={`sidebar-link ${
+                activeTab === "myGrievances" ? "active" : ""
+              }`}
+              style={{
+                background: "none",
+                border: "none",
+                width: "100%",
+                textAlign: "left",
+                cursor: "pointer",
+              }}
             >
               <svg
                 className="sidebar-icon"
