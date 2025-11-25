@@ -75,7 +75,7 @@ const AdminDashboard = ({ user }) => {
 
   // Fetch Grievances
   useEffect(() => {
-    let unsubscribe = () => {};
+    let unsubscribe = () => { };
     try {
       const q = query(collection(db, "grievances")); // add orderBy('created_at','desc') when index ready
       unsubscribe = onSnapshot(
@@ -136,10 +136,7 @@ const AdminDashboard = ({ user }) => {
               .length,
             escalated: grievanceData.filter((g) => g.status === "Escalated")
               .length,
-<<<<<<< HEAD
-=======
             overdue: slaCounts.overdue || 0,
->>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
           });
         },
         (error) => {
@@ -286,11 +283,8 @@ const AdminDashboard = ({ user }) => {
     e.preventDefault();
     try {
       const response = await fetch(
-<<<<<<< HEAD
         `${API_BASE}/api/users/${editingUser.id}/role`,
-=======
         `http://localhost:5000/api/users/${editingUser.id}/role`,
->>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -322,18 +316,12 @@ const AdminDashboard = ({ user }) => {
       )
     ) {
       try {
-<<<<<<< HEAD
-        const response = await fetch(`${API_BASE}/api/users/${userId}`, {
-          method: "DELETE",
-        });
-=======
         const response = await fetch(
           `http://localhost:5000/api/users/${userId}`,
           {
             method: "DELETE",
           }
         );
->>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
 
         if (!response.ok) {
           const data = await response.json();
@@ -635,9 +623,8 @@ const AdminDashboard = ({ user }) => {
             Pending
           </button>
           <button
-            className={`filter-btn ${
-              statusFilter === "In Progress" && "active"
-            }`}
+            className={`filter-btn ${statusFilter === "In Progress" && "active"
+              }`}
             onClick={() => setStatusFilter("In Progress")}
           >
             In Progress
@@ -871,27 +858,27 @@ const AdminDashboard = ({ user }) => {
 
             {(editingUser.role === "warden_girls" ||
               editingUser.role === "warden_boys") && (
-              <div className="form-group" style={{ marginBottom: "1rem" }}>
-                <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                  Hostel Type
-                </label>
-                <select
-                  value={editingUser.hostelType || ""}
-                  onChange={(e) =>
-                    setEditingUser({
-                      ...editingUser,
-                      hostelType: e.target.value,
-                    })
-                  }
-                  className="form-input"
-                  style={{ width: "100%", padding: "0.5rem" }}
-                >
-                  <option value="">Select Type</option>
-                  <option value="girls">Girls Hostel</option>
-                  <option value="boys">Boys Hostel</option>
-                </select>
-              </div>
-            )}
+                <div className="form-group" style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                    Hostel Type
+                  </label>
+                  <select
+                    value={editingUser.hostelType || ""}
+                    onChange={(e) =>
+                      setEditingUser({
+                        ...editingUser,
+                        hostelType: e.target.value,
+                      })
+                    }
+                    className="form-input"
+                    style={{ width: "100%", padding: "0.5rem" }}
+                  >
+                    <option value="">Select Type</option>
+                    <option value="girls">Girls Hostel</option>
+                    <option value="boys">Boys Hostel</option>
+                  </select>
+                </div>
+              )}
 
             <div className="modal-footer">
               <button type="submit" className="login-button">
@@ -1041,9 +1028,8 @@ const AdminDashboard = ({ user }) => {
                 e.preventDefault();
                 setActiveTab("dashboard");
               }}
-              className={`sidebar-link ${
-                activeTab === "dashboard" ? "active" : ""
-              }`}
+              className={`sidebar-link ${activeTab === "dashboard" ? "active" : ""
+                }`}
             >
               <svg
                 className="sidebar-icon"
@@ -1062,9 +1048,8 @@ const AdminDashboard = ({ user }) => {
                 e.preventDefault();
                 setActiveTab("allGrievances");
               }}
-              className={`sidebar-link ${
-                activeTab === "allGrievances" ? "active" : ""
-              }`}
+              className={`sidebar-link ${activeTab === "allGrievances" ? "active" : ""
+                }`}
             >
               <svg
                 className="sidebar-icon"
@@ -1083,9 +1068,8 @@ const AdminDashboard = ({ user }) => {
                 e.preventDefault();
                 setActiveTab("users");
               }}
-              className={`sidebar-link ${
-                activeTab === "users" ? "active" : ""
-              }`}
+              className={`sidebar-link ${activeTab === "users" ? "active" : ""
+                }`}
             >
               <svg
                 className="sidebar-icon"
@@ -1129,30 +1113,18 @@ const AdminDashboard = ({ user }) => {
               style={{ color: "white", fontSize: "2rem", margin: "0 0 8px 0" }}
             >
               {activeTab === "dashboard"
-<<<<<<< HEAD
-                ? "Dashboard"
-                : activeTab === "users"
-                ? "User Management"
-                : "All Grievances"}
-=======
                 ? t("dashboard")
                 : activeTab === "users"
-                ? usersHeader || "User Management"
-                : allGrievancesHeader || "All Grievances"}
->>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
+                  ? usersHeader || "User Management"
+                  : allGrievancesHeader || "All Grievances"}
             </h1>
             <p
               className="header-subtitle"
               style={{ color: "rgba(255, 255, 255, 0.9)", margin: 0 }}
             >
               {activeTab === "users"
-<<<<<<< HEAD
-                ? "Manage users and roles"
-                : "Manage and monitor all grievances"}
-=======
                 ? usersSubtitle || "Manage users and roles"
                 : allGrievancesSubtitle || "Manage and monitor all grievances"}
->>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
             </p>
           </div>
           <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
