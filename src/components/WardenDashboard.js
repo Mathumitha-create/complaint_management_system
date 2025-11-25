@@ -14,6 +14,8 @@ import { auth } from "../firebase";
 import { useTranslation, useTranslatedText } from "../hooks/useTranslation";
 import TranslatedText from "./TranslatedText";
 import SpeakButton from "./SpeakButton";
+import useBatchTranslate from "../hooks/useBatchTranslate";
+import LanguageSelector from "./LanguageSelector";
 import "./Dashboard.css";
 
 const WardenDashboard = ({ user }) => {
@@ -39,54 +41,117 @@ const WardenDashboard = ({ user }) => {
 
     // 1. Base Reference to 'complaints' collection (Backend writes here)
     const complaintsRef = collection(db, "complaints");
-    let q = query(complaintsRef);
 
-    // 2. Apply Filtering based on Role/HostelType
-    if (user.hostelType) {
-      console.log(`🔍 Filtering for ${user.hostelType}`);
-      // Handle variations (e.g., "Boys Hostel" vs "boys")
-      const searchTerms = [user.hostelType];
-      if (user.hostelType === "Boys Hostel") searchTerms.push("boys", "Boys", "boys hostel", "Boys hostel");
-      if (user.hostelType === "Girls Hostel") searchTerms.push("girls", "Girls", "girls hostel", "Girls hostel");
+    // Decide whether we need to apply a client-side hostel filter.
+    // We'll listen to the full collection and filter in JS when the user
+    // is a warden (or has a hostelType). This is more tolerant of
+    // variations like "girls", "Girls Hostel", trailing spaces, etc.
+    const needHostelFilter = Boolean(
+      user?.hostelType ||
+        user?.role === "warden_boys" ||
+        user?.role === "warden_girls"
+    );
 
-      q = query(complaintsRef, where("hostelType", "in", searchTerms));
-    } else if (user.role === 'warden_boys') {
-      console.log("🔍 Filtering for Boys Hostel (Legacy Role Check)");
-      q = query(complaintsRef, where("hostelType", "in", ["Boys Hostel", "boys", "Boys", "boys hostel", "Boys hostel"]));
-    } else if (user.role === 'warden_girls') {
-      console.log("🔍 Filtering for Girls Hostel (Legacy Role Check)");
-      q = query(complaintsRef, where("hostelType", "in", ["Girls Hostel", "girls", "Girls", "girls hostel", "Girls hostel"]));
-    } else {
-      console.log("👀 Admin/VP: Showing all complaints");
-      // Admin/VP see all
-    }
+    const normalizedHostelKey = (s) =>
+      (s || "").toString().trim().toLowerCase();
 
-    console.log("🛠️ Query constructed. Listening for updates...");
+    const targetTerms = [];
+    if (user?.hostelType)
+      targetTerms.push(normalizedHostelKey(user.hostelType));
+    if (user?.role === "warden_boys") targetTerms.push("boys", "boys hostel");
+    if (user?.role === "warden_girls")
+      targetTerms.push("girls", "girls hostel");
 
-    // 3. Real-time Listener
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const complaintData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        // Normalize fields for frontend
-        status: doc.data().resolved ? "Resolved" : (doc.data().escalated ? "Escalated" : "Pending"),
-        created_at: doc.data().createdAt ? new Date(doc.data().createdAt) : new Date()
-      }));
+    console.log(
+      needHostelFilter
+        ? `🔍 Will apply tolerant client-side hostel filter for: ${JSON.stringify(
+            targetTerms
+          )}`
+        : "👀 Admin/VP: Showing all complaints"
+    );
 
-      console.log("✅ Real-time update:", complaintData.length, "complaints");
+    console.log("🛠️ Listening for updates (full collection)...");
 
-      // Client-side sort (safer than Firestore orderBy without index)
-      complaintData.sort((a, b) => b.created_at - a.created_at);
+    // 2. Real-time Listener (listen to all, filter in snapshot if needed)
+    const unsubscribe = onSnapshot(
+      complaintsRef,
+      (snapshot) => {
+        let complaintData = snapshot.docs.map((doc) => {
+          const data = {
+            id: doc.id,
+            ...doc.data(),
+            // Normalize fields for frontend
+            status: doc.data().resolved
+              ? "Resolved"
+              : doc.data().escalated
+              ? "Escalated"
+              : "Pending",
+            created_at: doc.data().createdAt
+              ? new Date(doc.data().createdAt)
+              : new Date(),
+          };
 
-      setComplaints(complaintData);
-      setFilteredComplaints(complaintData);
-    }, (error) => {
-      console.error("❌ Firestore Error:", error);
-      // Fallback or alert
-      if (error.code === 'permission-denied') {
-        alert("Permission denied. Please check Firestore rules.");
+          // Normalize description if it begins with the title (older records)
+          try {
+            if (data.title && data.description) {
+              const t = String(data.title).trim();
+              const desc = String(data.description).trim();
+              const patterns = [
+                `${t}\n\n`,
+                `${t}\n`,
+                `${t}: `,
+                `${t} - `,
+                `${t}. `,
+                `${t} `,
+              ];
+              for (const p of patterns) {
+                if (desc.startsWith(p)) {
+                  data.description = desc.slice(p.length).trim();
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          return data;
+        });
+
+        console.log(
+          "✅ Real-time update (raw):",
+          complaintData.length,
+          "complaints"
+        );
+
+        // If needed, apply tolerant client-side hostel filtering
+        if (needHostelFilter && targetTerms.length > 0) {
+          complaintData = complaintData.filter((c) => {
+            const h = normalizedHostelKey(c.hostelType || "");
+            // include if any target term is contained in the hostelType
+            return targetTerms.some((t) => h.includes(t));
+          });
+          console.log(
+            "🔎 After client-side hostel filter:",
+            complaintData.length,
+            "complaints"
+          );
+        }
+
+        // Client-side sort (safer than Firestore orderBy without index)
+        complaintData.sort((a, b) => b.created_at - a.created_at);
+
+        setComplaints(complaintData);
+        setFilteredComplaints(complaintData);
+      },
+      (error) => {
+        console.error("❌ Firestore Error:", error);
+        // Fallback or alert
+        if (error.code === "permission-denied") {
+          alert("Permission denied. Please check Firestore rules.");
+        }
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [user]);
@@ -101,9 +166,30 @@ const WardenDashboard = ({ user }) => {
     }
   }, [statusFilter, complaints]);
 
+  // Batch translate visible complaints when language changes
+  const textsToTranslate = React.useMemo(() => {
+    if (!filteredComplaints || filteredComplaints.length === 0) return [];
+    const s = new Set();
+    filteredComplaints.forEach((c) => {
+      if (c.title) s.add(String(c.title));
+      if (c.description) s.add(String(c.description));
+      if (c.category) s.add(String(c.category));
+      // Support alternate field names for hostel stored in different documents
+      const hostelVal = c.hostelType || c.hostel_type || c.hostel;
+      if (hostelVal) s.add(String(hostelVal));
+    });
+    return Array.from(s);
+  }, [filteredComplaints]);
+
+  useBatchTranslate(
+    textsToTranslate,
+    Boolean(filteredComplaints && filteredComplaints.length > 0)
+  );
+
   const handleUpdateStatus = async (complaintId, newStatus) => {
     try {
-      await updateDoc(doc(db, "complaints", complaintId), { // Fixed collection name to 'complaints'
+      await updateDoc(doc(db, "complaints", complaintId), {
+        // Fixed collection name to 'complaints'
         resolved: newStatus === "Resolved",
         status: newStatus, // Keep status field for backward compatibility if needed
         resolvedAt: newStatus === "Resolved" ? new Date().toISOString() : null,
@@ -134,11 +220,10 @@ const WardenDashboard = ({ user }) => {
   };
 
   return (
-    <div className="dashboard-layout">
+    <div className="dashboard-container">
       <div className="sidebar">
-        <div className="sidebar-header">
-          <h2>🏠 <TranslatedText text="Warden Portal" /></h2>
-          <p><TranslatedText text="Hostel Management" /></p>
+        <div className="sidebar-brand">
+          🏠 <TranslatedText text="Warden Portal" />
         </div>
         <ul className="sidebar-menu">
           <li className="sidebar-item">
@@ -160,11 +245,12 @@ const WardenDashboard = ({ user }) => {
         <div
           className="header"
           style={{
-            background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+            background: "linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)",
             padding: "24px 32px",
-            borderRadius: "12px",
+            borderRadius: "16px",
             marginBottom: "24px",
-            boxShadow: "0 4px 20px rgba(245, 158, 11, 0.3)",
+            boxShadow: "0 8px 32px rgba(6, 182, 212, 0.25)",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
           }}
         >
           <div
@@ -172,69 +258,59 @@ const WardenDashboard = ({ user }) => {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              gap: 16,
             }}
           >
-            <div>
+            <div style={{ flex: 1 }}>
               <h1
                 style={{
                   color: "white",
-                  fontSize: "1.8rem",
-                  fontWeight: "700",
-                  margin: "0 0 8px 0",
+                  fontSize: "1.6rem",
+                  margin: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
                 }}
               >
-                🏠 <TranslatedText text="Warden Dashboard" />
+                🏠 {t("warden_dashboard") || "Warden Dashboard"}
               </h1>
-              <p
-                style={{
-                  color: "rgba(255, 255, 255, 0.9)",
-                  fontSize: "1rem",
-                  margin: "0",
-                }}
-              >
+              <p style={{ color: "rgba(255,255,255,0.9)", margin: 0 }}>
                 {user.email}
-              </p>
-              <p
-                style={{
-                  color: "rgba(255, 255, 255, 0.8)",
-                  fontSize: "0.9rem",
-                  margin: "4px 0 0 0",
-                }}
-              >
-                📋 <TranslatedText text="Hostel Department Complaints" />
               </p>
               {user.hostelType && (
                 <span
                   style={{
                     display: "inline-block",
-                    marginTop: "8px",
+                    marginTop: 8,
                     padding: "4px 12px",
-                    background: "rgba(255, 255, 255, 0.2)",
-                    borderRadius: "20px",
+                    background: "rgba(255,255,255,0.2)",
+                    borderRadius: 20,
                     fontSize: "0.85rem",
                     color: "white",
-                    border: "1px solid rgba(255, 255, 255, 0.4)"
+                    border: "1px solid rgba(255,255,255,0.4)",
                   }}
                 >
                   🔍 Filtering: {user.hostelType}
                 </span>
               )}
             </div>
-            <button
-              onClick={() => auth.signOut()}
-              style={{
-                background: "rgba(255, 255, 255, 0.2)",
-                color: "white",
-                border: "2px solid rgba(255, 255, 255, 0.3)",
-                padding: "10px 24px",
-                borderRadius: "8px",
-                fontSize: "0.95rem",
-                fontWeight: "600",
-                cursor: "pointer",
-              }}
-            >
-              🚪 {t("logout")}
-            </button>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <LanguageSelector />
+              <button
+                onClick={() => auth.signOut()}
+                style={{
+                  background: "rgba(255,255,255,0.25)",
+                  color: "white",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                  padding: "10px 24px",
+                  borderRadius: 24,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                🚪 {t("logout")}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -247,7 +323,10 @@ const WardenDashboard = ({ user }) => {
               marginBottom: "20px",
             }}
           >
-            <h2><TranslatedText text="Hostel Complaints" /> ({filteredComplaints.length})</h2>
+            <h2>
+              <TranslatedText text="Hostel Complaints" /> (
+              {filteredComplaints.length})
+            </h2>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -319,19 +398,19 @@ const WardenDashboard = ({ user }) => {
                           margin: "0 0 8px 0",
                         }}
                       >
-                        📧 {complaint.studentName || complaint.studentEmail || "Student"}
+                        📧{" "}
+                        {complaint.studentName ||
+                          complaint.studentEmail ||
+                          "Student"}
                       </p>
                       <p
                         style={{
                           color: "#374151",
                           margin: "0 0 12px 0",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
+                          lineHeight: "1.4",
                         }}
                       >
                         <TranslatedText text={complaint.description} />
-                        <TranslatedSpeakButton text={complaint.description} />
                       </p>
                       <div
                         style={{
@@ -360,7 +439,10 @@ const WardenDashboard = ({ user }) => {
                             color: "#92400e",
                           }}
                         >
-                          🏠 <TranslatedText text={complaint.hostelType || "Hostel"} />
+                          🏠{" "}
+                          <TranslatedText
+                            text={complaint.hostelType || "Hostel"}
+                          />
                         </span>
                         <span
                           style={{
@@ -388,7 +470,9 @@ const WardenDashboard = ({ user }) => {
                       }}
                     >
                       <textarea
-                        placeholder={t("add_comment") || "Add resolution note..."}
+                        placeholder={
+                          t("add_comment") || "Add resolution note..."
+                        }
                         value={resolutionNote}
                         onChange={(e) => setResolutionNote(e.target.value)}
                         style={{

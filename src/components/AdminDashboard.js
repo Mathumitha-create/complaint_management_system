@@ -13,7 +13,10 @@ import {
 } from "firebase/firestore";
 import { auth } from "../firebase";
 import { useTranslation, useTranslatedText } from "../hooks/useTranslation";
+import { useLanguage } from "../contexts/LanguageContext";
+import { translateBatch } from "../services/translationService";
 import TranslatedText from "./TranslatedText";
+import { getComplaintsBySLAStatus, getSLAStatus } from "../utils/slaUtils";
 import SpeakButton from "./SpeakButton";
 import TranslatedTextWithSpeech from "./TranslatedTextWithSpeech";
 import LanguageSelector from "./LanguageSelector";
@@ -23,6 +26,18 @@ import "./AdminDashboard.css";
 const AdminDashboard = ({ user }) => {
   console.log("🚀 AdminDashboard component loaded for user:", user?.email);
   const { t } = useTranslation();
+  const { currentLanguage, cacheTranslation } = useLanguage();
+
+  // Translate some header literals (User Management / All Grievances) so they show in selected language
+  const { translatedText: usersHeader } = useTranslatedText("User Management");
+  const { translatedText: allGrievancesHeader } =
+    useTranslatedText("All Grievances");
+  const { translatedText: usersSubtitle } = useTranslatedText(
+    "Manage users and roles"
+  );
+  const { translatedText: allGrievancesSubtitle } = useTranslatedText(
+    "Manage and monitor all grievances"
+  );
 
   // Component for translated text with TTS
   const TranslatedSpeakButton = ({ text }) => {
@@ -55,6 +70,7 @@ const AdminDashboard = ({ user }) => {
     inProgress: 0,
     resolved: 0,
     escalated: 0,
+    overdue: 0,
   });
 
   // Fetch Grievances
@@ -75,6 +91,30 @@ const AdminDashboard = ({ user }) => {
             if (!data.student_name) data.student_name = "Unknown Student";
             if (!data.title) data.title = "Untitled Grievance";
             if (!data.description) data.description = "No description provided";
+
+            // If description was stored containing the title (old submissions), strip the leading title
+            try {
+              if (data.title && data.description) {
+                const t = String(data.title).trim();
+                const desc = String(data.description).trim();
+                const patterns = [
+                  `${t}\n\n`,
+                  `${t}\n`,
+                  `${t}: `,
+                  `${t} - `,
+                  `${t}. `,
+                  `${t} `,
+                ];
+                for (const p of patterns) {
+                  if (desc.startsWith(p)) {
+                    data.description = desc.slice(p.length).trim();
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore normalization errors
+            }
             return { id: d.id, ...data };
           });
 
@@ -86,6 +126,7 @@ const AdminDashboard = ({ user }) => {
 
           setGrievances(grievanceData);
           setFilteredGrievances(grievanceData);
+          const slaCounts = getComplaintsBySLAStatus(grievanceData);
           setStats({
             total: grievanceData.length,
             pending: grievanceData.filter((g) => g.status === "Pending").length,
@@ -95,6 +136,10 @@ const AdminDashboard = ({ user }) => {
               .length,
             escalated: grievanceData.filter((g) => g.status === "Escalated")
               .length,
+<<<<<<< HEAD
+=======
+            overdue: slaCounts.overdue || 0,
+>>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
           });
         },
         (error) => {
@@ -157,6 +202,36 @@ const AdminDashboard = ({ user }) => {
     setFilteredGrievances(filtered);
   }, [categoryFilter, statusFilter, searchTerm, grievances]);
 
+  // Batch translate visible grievance texts when language changes to reduce API calls
+  useEffect(() => {
+    const doBatchTranslate = async () => {
+      try {
+        if (!filteredGrievances || filteredGrievances.length === 0) return;
+        if (currentLanguage === "en") return; // no need to translate
+
+        // collect unique texts to translate
+        const set = new Set();
+        filteredGrievances.forEach((g) => {
+          if (g.title) set.add(g.title);
+          if (g.description) set.add(g.description);
+          if (g.category) set.add(String(g.category));
+        });
+
+        const texts = Array.from(set);
+        if (texts.length === 0) return;
+
+        const translations = await translateBatch(texts, currentLanguage);
+        translations.forEach((translated, idx) => {
+          cacheTranslation(texts[idx], currentLanguage, translated);
+        });
+      } catch (err) {
+        console.error("Batch translation failed:", err);
+      }
+    };
+
+    doBatchTranslate();
+  }, [currentLanguage, filteredGrievances, cacheTranslation]);
+
   // Filter Users
   useEffect(() => {
     if (userSearchTerm) {
@@ -211,7 +286,11 @@ const AdminDashboard = ({ user }) => {
     e.preventDefault();
     try {
       const response = await fetch(
+<<<<<<< HEAD
         `${API_BASE}/api/users/${editingUser.id}/role`,
+=======
+        `http://localhost:5000/api/users/${editingUser.id}/role`,
+>>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -243,9 +322,18 @@ const AdminDashboard = ({ user }) => {
       )
     ) {
       try {
+<<<<<<< HEAD
         const response = await fetch(`${API_BASE}/api/users/${userId}`, {
           method: "DELETE",
         });
+=======
+        const response = await fetch(
+          `http://localhost:5000/api/users/${userId}`,
+          {
+            method: "DELETE",
+          }
+        );
+>>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
 
         if (!response.ok) {
           const data = await response.json();
@@ -313,6 +401,9 @@ const AdminDashboard = ({ user }) => {
       .slice(0, 5);
 
     const recentGrievances = grievances.slice(0, 5);
+    const overdueList = grievances
+      .filter((g) => getSLAStatus(g).status === "Overdue")
+      .slice(0, 5);
 
     return (
       <div className="dashboard-content">
@@ -367,6 +458,15 @@ const AdminDashboard = ({ user }) => {
             </div>
             <div className="stat-icon">✅</div>
           </div>
+          <div className="stat-card admin-stat-overdue">
+            <div className="stat-info">
+              <h3>{t("overdue") || "Overdue"}</h3>
+              <div className="stat-value" style={{ color: "#ef4444" }}>
+                {stats.overdue}
+              </div>
+            </div>
+            <div className="stat-icon">⚠️</div>
+          </div>
         </div>
 
         <div className="admin-dashboard-grid">
@@ -403,7 +503,9 @@ const AdminDashboard = ({ user }) => {
               {topCategories.length > 0 ? (
                 topCategories.map(([category, count]) => (
                   <div key={category} className="category-item-admin">
-                    <span className="category-name-admin">{category}</span>
+                    <span className="category-name-admin">
+                      <TranslatedText text={category} />
+                    </span>
                     <span className="category-count-admin">{count}</span>
                   </div>
                 ))
@@ -423,7 +525,9 @@ const AdminDashboard = ({ user }) => {
                     className="recent-item"
                     onClick={() => viewDetails(g)}
                   >
-                    <div className="recent-title">{g.title}</div>
+                    <div className="recent-title">
+                      <TranslatedText text={g.title} />
+                    </div>
                     <div className="recent-meta">
                       <span className="recent-student">{g.student_name}</span>
                       <span
@@ -431,13 +535,45 @@ const AdminDashboard = ({ user }) => {
                           .toLowerCase()
                           .replace(" ", "")}`}
                       >
-                        {g.status}
+                        <TranslatedText text={g.status} />
                       </span>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="empty-message">No recent grievances</p>
+                <p className="empty-message">
+                  <TranslatedText text="No recent grievances" />
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="admin-card recent-activity">
+            <h3>⚠️ Overdue Cases</h3>
+            <div className="recent-list">
+              {overdueList.length > 0 ? (
+                overdueList.map((g) => (
+                  <div
+                    key={g.id}
+                    className="recent-item"
+                    onClick={() => viewDetails(g)}
+                  >
+                    <div className="recent-title">
+                      <TranslatedText text={g.title} />
+                    </div>
+                    <div className="recent-meta">
+                      <span className="recent-student">{g.student_name}</span>
+                      <span
+                        className={`recent-status status-${g.status
+                          .toLowerCase()
+                          .replace(" ", "")}`}
+                      >
+                        <TranslatedText text={g.status} />
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="empty-message">No overdue cases</p>
               )}
             </div>
           </div>
@@ -993,18 +1129,30 @@ const AdminDashboard = ({ user }) => {
               style={{ color: "white", fontSize: "2rem", margin: "0 0 8px 0" }}
             >
               {activeTab === "dashboard"
+<<<<<<< HEAD
                 ? "Dashboard"
                 : activeTab === "users"
                 ? "User Management"
                 : "All Grievances"}
+=======
+                ? t("dashboard")
+                : activeTab === "users"
+                ? usersHeader || "User Management"
+                : allGrievancesHeader || "All Grievances"}
+>>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
             </h1>
             <p
               className="header-subtitle"
               style={{ color: "rgba(255, 255, 255, 0.9)", margin: 0 }}
             >
               {activeTab === "users"
+<<<<<<< HEAD
                 ? "Manage users and roles"
                 : "Manage and monitor all grievances"}
+=======
+                ? usersSubtitle || "Manage users and roles"
+                : allGrievancesSubtitle || "Manage and monitor all grievances"}
+>>>>>>> 453c412 (feat: Enhance Student and Warden Dashboards with Batch Translation and Improved UI)
             </p>
           </div>
           <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>

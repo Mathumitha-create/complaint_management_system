@@ -1,12 +1,19 @@
 // Main app component handling routing and auth state
 import React, { useState, useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
 import { auth, db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import Login from "./components/login";
 import Signup from "./components/Signup";
 import StudentDashboard from "./components/StudentDashboard";
 import AdminDashboard from "./components/AdminDashboard";
+import VPDashboard from "./components/VPDashboard";
 import WardenDashboard from "./components/SimpleWardenDashboard";
 import FacultyDashboard from "./components/SimpleFacultyDashboard";
 import DebugPanel from "./components/DebugPanel";
@@ -100,8 +107,15 @@ function App() {
       // Only redirect if we are on login, signup, or root
       if (path === "/login" || path === "/signup" || path === "/") {
         if (userRole === "admin") navigate("/admin-dashboard");
-        else if (userRole === "warden" || userRole === "warden_boys" || userRole === "warden_girls") navigate("/warden-dashboard");
-        else if (userRole === "faculty" || userRole === "hod") navigate("/faculty-dashboard");
+        else if (userRole === "vp") navigate("/vp-dashboard");
+        else if (
+          userRole === "warden" ||
+          userRole === "warden_boys" ||
+          userRole === "warden_girls"
+        )
+          navigate("/warden-dashboard");
+        else if (userRole === "faculty" || userRole === "hod")
+          navigate("/faculty-dashboard");
         else navigate("/student-dashboard");
       }
     }
@@ -142,21 +156,25 @@ function App() {
   // Protected Route Component
   const ProtectedRoute = ({ children, allowedRoles }) => {
     if (!user) return <Navigate to="/login" />;
-    if (allowedRoles && !allowedRoles.includes(userRole) && !allowedRoles.includes("any")) {
+    if (
+      allowedRoles &&
+      !allowedRoles.includes(userRole) &&
+      !allowedRoles.includes("any")
+    ) {
       // Redirect to appropriate dashboard if role doesn't match
       if (userRole === "admin") return <Navigate to="/admin-dashboard" />;
-      if (userRole === "warden" || userRole === "warden_boys" || userRole === "warden_girls") return <Navigate to="/warden-dashboard" />;
-      if (userRole === "faculty" || userRole === "hod") return <Navigate to="/faculty-dashboard" />;
+      if (
+        userRole === "warden" ||
+        userRole === "warden_boys" ||
+        userRole === "warden_girls"
+      )
+        return <Navigate to="/warden-dashboard" />;
+      if (userRole === "faculty" || userRole === "hod")
+        return <Navigate to="/faculty-dashboard" />;
       return <Navigate to="/student-dashboard" />;
     }
-    return (
-      <>
-        {children}
-      </>
-    );
+    return <>{children}</>;
   };
-
-
 
   return (
     <LanguageProvider>
@@ -202,7 +220,14 @@ function App() {
           >
             🌐 TRANSLATION DEMO - Click to Exit
           </div>
-          <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 1000 }}>
+          <div
+            style={{
+              position: "fixed",
+              top: "20px",
+              right: "20px",
+              zIndex: 1000,
+            }}
+          >
             <LanguageSelector />
           </div>
           <TranslationDemo />
@@ -210,8 +235,26 @@ function App() {
       )}
 
       <Routes>
-        <Route path="/login" element={!user ? <Login onShowSignup={() => navigate("/signup")} /> : <Navigate to="/" />} />
-        <Route path="/signup" element={!user ? <Signup onBackToLogin={() => navigate("/login")} /> : <Navigate to="/" />} />
+        <Route
+          path="/login"
+          element={
+            !user ? (
+              <Login onShowSignup={() => navigate("/signup")} />
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            !user ? (
+              <Signup onBackToLogin={() => navigate("/login")} />
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
 
         <Route
           path="/student-dashboard"
@@ -232,9 +275,20 @@ function App() {
         />
 
         <Route
+          path="/vp-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["vp"]}>
+              <VPDashboard user={combinedUser} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/warden-dashboard"
           element={
-            <ProtectedRoute allowedRoles={["warden", "warden_boys", "warden_girls"]}>
+            <ProtectedRoute
+              allowedRoles={["warden", "warden_boys", "warden_girls"]}
+            >
               <WardenDashboard user={combinedUser} />
             </ProtectedRoute>
           }

@@ -54,14 +54,49 @@ const SimpleWardenDashboard = ({ user }) => {
 
             // Normalize other fields
             if (!data.category) data.category = "Uncategorized";
-            // Better title fallback: use description first 50 chars or category
-            if (!data.title || data.title.trim() === "") {
-              if (data.description) {
-                data.title = data.description.substring(0, 50) + (data.description.length > 50 ? "..." : "");
+
+            // Parse title and description if they're combined
+            // Backend stores: "title\n\ndescription"
+            if (data.description && (!data.title || data.title.trim() === "")) {
+              // Try to extract title from description
+              if (data.description.includes("\n\n")) {
+                const parts = data.description.split("\n\n");
+                data.title = parts[0].trim();
+                data.description = parts.slice(1).join("\n\n").trim();
               } else {
-                data.title = data.category || "Untitled Grievance";
+                // Use first line as title if multiple lines exist
+                const lines = data.description.split("\n");
+                if (lines.length > 1) {
+                  data.title = lines[0].trim();
+                  data.description = lines.slice(1).join("\n").trim();
+                } else {
+                  // Single line - use category as title
+                  data.title = data.category + " Complaint";
+                }
               }
             }
+
+            // Better title handling: 
+            // If no title exists after parsing, create one from category
+            if (!data.title || data.title.trim() === "" || data.title === data.description) {
+              data.title = data.category + " Complaint";
+            }
+
+            // Clean up description if it starts with the title
+            // This handles cases where the title is duplicated at the start of the description
+            if (data.description && data.title) {
+              const titleLower = data.title.toLowerCase().trim();
+              const descLower = data.description.toLowerCase().trim();
+
+              // If description starts with the title, remove it
+              if (descLower.startsWith(titleLower)) {
+                // Remove the title from the description and trim any leading spaces/punctuation
+                data.description = data.description.substring(data.title.length).trim();
+                // Remove leading punctuation like colons, dashes, etc.
+                data.description = data.description.replace(/^[:\-\s]+/, '');
+              }
+            }
+
             if (!data.student_name) data.student_name = "Unknown Student";
 
             return { id: d.id, ...data };
@@ -82,22 +117,45 @@ const SimpleWardenDashboard = ({ user }) => {
 
           // Filter Complaints
           const finalComplaints = allComplaints.filter(c => {
-            // Robust check for hostel type
-            const rawType = c.hostelType || c.hostel_type || "";
+            // First, check if this is a hostel-related complaint
+            const category = (c.category || "").toLowerCase().trim();
+            const isHostelComplaint = category.includes("hostel") ||
+              category.includes("mess") ||
+              category.includes("food") ||
+              category.includes("accommodation") ||
+              category.includes("maintenance");
+
+            // If not a hostel complaint, exclude it
+            if (!isHostelComplaint) {
+              return false;
+            }
+
+            // If warden is "General" (e.g. Admin/VP viewing this dashboard), show all hostel complaints
+            if (wardenType === "General") return true;
+
+            // Check hostel type match
+            const rawType = c.hostelType || c.hostel_type || c.hostel || "";
             const cHostelType = rawType.toString().toLowerCase().trim();
             const wType = wardenType.toLowerCase().trim();
 
-            // If warden is "General" (e.g. Admin/VP viewing this dashboard), show all
-            if (wardenType === "General") return true;
+            // If complaint has no hostel type specified, exclude it (safety check)
+            if (!cHostelType) {
+              console.warn(`⚠️ Complaint ${c.id} has no hostel type, excluding from warden view`);
+              return false;
+            }
 
+            // Match Boys Hostel
             if (wType.includes("boys")) {
               return cHostelType.includes("boys") || cHostelType.includes("men");
             }
+
+            // Match Girls Hostel
             if (wType.includes("girls")) {
               return cHostelType.includes("girls") || cHostelType.includes("women") || cHostelType.includes("ladies");
             }
 
-            return true; // Fallback
+            // If warden type doesn't match known patterns, exclude
+            return false;
           });
 
           console.log(`✅ Loaded ${finalComplaints.length} complaints for ${wardenType}`);
@@ -361,43 +419,168 @@ const SimpleWardenDashboard = ({ user }) => {
               const timeRemaining = getTimeRemaining(complaint);
               const overdueFlag = isOverdue(complaint);
 
+              // Get status color
+              const getStatusBgColor = (status) => {
+                switch (status) {
+                  case "Resolved": return "#d1fae5";
+                  case "In Progress": return "#dbeafe";
+                  case "Escalated": return "#fee2e2";
+                  default: return "#fef3c7"; // Pending
+                }
+              };
+
+              const getStatusTextColor = (status) => {
+                switch (status) {
+                  case "Resolved": return "#065f46";
+                  case "In Progress": return "#1e40af";
+                  case "Escalated": return "#991b1b";
+                  default: return "#92400e"; // Pending
+                }
+              };
+
               return (
                 <div
                   key={complaint.id}
                   style={{
                     border: overdueFlag ? "2px solid #ef4444" : "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                    padding: "15px",
-                    background: overdueFlag ? "#fef2f2" : "#f9fafb",
+                    borderRadius: "12px",
+                    padding: "18px",
+                    background: overdueFlag ? "#fef2f2" : "white",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <h3 style={{ margin: 0, color: "#1f2937" }}>
-                          <TranslatedText text={complaint.title} />
-                        </h3>
-                        <button
-                          onClick={() => speakText(`${complaint.title}. ${complaint.description}`, complaint.id)}
-                          style={{ background: "none", border: "none", cursor: "pointer" }}
-                        >
-                          {speakingId === complaint.id ? "⏸️" : "🔊"}
-                        </button>
-                      </div>
-                      <p style={{ color: "#4b5563", margin: "5px 0" }}>
-                        <TranslatedText text={complaint.description} />
-                      </p>
-                      <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
-                        <span><TranslatedText text="Hostel" />: <TranslatedText text={complaint.hostelType} /></span> |
-                        <span> <TranslatedText text="Student" />: {complaint.studentName} ({complaint.registerNumber})</span>
-                      </div>
+                  {/* Title with speak button */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                    <h3 style={{ margin: 0, color: "#1f2937", fontSize: "1.1rem", fontWeight: "600", flex: 1 }}>
+                      <TranslatedText text={complaint.title} />
+                    </h3>
+                    {overdueFlag && <span style={{ fontSize: "1.2rem" }}>⚠️</span>}
+                    <button
+                      onClick={() => speakText(`${complaint.title}. ${complaint.description}`, complaint.id)}
+                      style={{
+                        background: speakingId === complaint.id ? "#ef4444" : "#2563eb",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "50%",
+                        width: "32px",
+                        height: "32px",
+                        cursor: "pointer",
+                        fontSize: "1rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      title={speakingId === complaint.id ? "Stop" : "Read aloud"}
+                    >
+                      {speakingId === complaint.id ? "⏸️" : "🔊"}
+                    </button>
+                  </div>
+
+                  {/* Description */}
+                  <p style={{ color: "#4b5563", margin: "0 0 12px 0", fontSize: "0.95rem", lineHeight: "1.5" }}>
+                    <TranslatedText text={complaint.description} />
+                  </p>
+
+                  {/* SLA Status Bar */}
+                  {overdueFlag && (
+                    <div style={{
+                      background: "#fee2e2",
+                      color: "#991b1b",
+                      padding: "8px 12px",
+                      borderRadius: "6px",
+                      marginBottom: "12px",
+                      fontSize: "0.85rem",
+                      fontWeight: "600"
+                    }}>
+                      ⚠️ Overdue: {slaStatus.status} - {timeRemaining}
                     </div>
+                  )}
+
+                  {/* Horizontal separator */}
+                  <div style={{
+                    height: overdueFlag ? "3px" : "2px",
+                    background: overdueFlag ? "#ef4444" : slaStatus.color || "#e5e7eb",
+                    marginBottom: "12px",
+                    borderRadius: "2px"
+                  }} />
+
+                  {/* Bottom row with badges and status dropdown */}
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "10px"
+                  }}>
+                    {/* Left side - badges */}
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", fontSize: "0.85rem" }}>
+                      {/* Category badge */}
+                      <span style={{
+                        background: "#dbeafe",
+                        color: "#1e40af",
+                        padding: "4px 12px",
+                        borderRadius: "6px",
+                        fontWeight: "500",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}>
+                        📁 <TranslatedText text={complaint.category} />
+                      </span>
+
+                      {/* Status badge */}
+                      <span style={{
+                        background: getStatusBgColor(complaint.status),
+                        color: getStatusTextColor(complaint.status),
+                        padding: "4px 12px",
+                        borderRadius: "6px",
+                        fontWeight: "600"
+                      }}>
+                        {complaint.status}
+                      </span>
+
+                      {/* Priority badge */}
+                      <span style={{
+                        background: priority === "High" ? "#fee2e2" : priority === "Medium" ? "#fef3c7" : "#dbeafe",
+                        color: priority === "High" ? "#991b1b" : priority === "Medium" ? "#92400e" : "#1e40af",
+                        padding: "4px 12px",
+                        borderRadius: "6px",
+                        fontWeight: "500",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}>
+                        🎯 {priority}
+                      </span>
+
+                      {/* Student email */}
+                      <span style={{ color: "#6b7280", display: "flex", alignItems: "center", gap: "4px" }}>
+                        📧 {complaint.studentEmail || complaint.email || complaint.studentName}
+                      </span>
+
+                      {/* Date */}
+                      <span style={{ color: "#6b7280", display: "flex", alignItems: "center", gap: "4px" }}>
+                        📅 {complaint.created_at?.toDate ? complaint.created_at.toDate().toLocaleDateString() : "N/A"}
+                      </span>
+                    </div>
+
+                    {/* Right side - status dropdown */}
                     <select
                       value={complaint.status}
                       onChange={(e) => updateStatus(complaint.id, e.target.value)}
-                      style={{ padding: "6px", borderRadius: "6px", border: "1px solid #ccc" }}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        border: "2px solid #e5e7eb",
+                        background: "white",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        color: "#1f2937"
+                      }}
                     >
                       <option value="Pending">Pending</option>
+
                       <option value="In Progress">In Progress</option>
                       <option value="Resolved">Resolved</option>
                     </select>

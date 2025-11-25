@@ -8,6 +8,7 @@ import TranslatedText from "./TranslatedText";
 import SpeakButton from "./SpeakButton";
 import { useTranslatedText } from "../hooks/useTranslation";
 import LanguageSelector from "./LanguageSelector";
+import useBatchTranslate from "../hooks/useBatchTranslate";
 import "./Dashboard.css";
 
 const StudentDashboard = ({ user }) => {
@@ -43,9 +44,7 @@ const StudentDashboard = ({ user }) => {
     const fetchComplaints = async () => {
       try {
         console.log("📡 Fetching complaints from Backend API...");
-        const response = await fetch(
-          `${API_BASE}/api/complaints/student/${user.uid}`
-        );
+        const response = await fetch(`http://localhost:5000/api/complaints/student/${user.uid}`);
 
         if (!response.ok) {
           throw new Error(`API Error: ${response.statusText}`);
@@ -54,23 +53,43 @@ const StudentDashboard = ({ user }) => {
         const data = await response.json();
         console.log("✅ API Response:", data);
 
+
         const grievanceData = data.map((d) => {
+          // Parse description to extract title and description
+          // Backend stores: "title\n\ndescription"
+          let title = d.category || "Complaint";
+          let description = d.description || "";
+
+          // If description contains double newline, split it
+          if (d.description && d.description.includes("\n\n")) {
+            const parts = d.description.split("\n\n");
+            title = parts[0].trim(); // First part is the title
+            description = parts.slice(1).join("\n\n").trim(); // Rest is description
+          } else if (d.description) {
+            // If no double newline, use first line as title
+            const lines = d.description.split("\n");
+            if (lines.length > 1) {
+              title = lines[0].trim();
+              description = lines.slice(1).join("\n").trim();
+            } else {
+              // Single line - use category as title and description as-is
+              title = d.category || "Complaint";
+              description = d.description;
+            }
+          }
+
           // Map Backend Fields to Frontend State
           return {
             id: d.id,
             ...d,
             // Map 'resolved' boolean to 'status' string
-            status: d.resolved
-              ? "Resolved"
-              : d.escalated
-              ? "Escalated"
-              : "Pending",
+            status: d.resolved ? "Resolved" : (d.escalated ? "Escalated" : "Pending"),
             // Map 'createdAt' (ISO string) to 'created_at' (Date object or keep string)
             created_at: d.createdAt ? new Date(d.createdAt) : new Date(),
             updated_at: d.resolvedAt ? new Date(d.resolvedAt) : new Date(),
-            // Ensure title exists (Backend stores description only)
-            title: d.category || "Complaint",
-            description: d.description,
+            // Use parsed title and description
+            title: title,
+            description: description
           };
         });
 
@@ -143,6 +162,26 @@ const StudentDashboard = ({ user }) => {
     setFilteredGrievances(filtered);
   }, [categoryFilter, statusFilter, searchTerm, grievances]);
 
+  // Batch translate visible grievances when language changes
+  const textsToTranslate = React.useMemo(() => {
+    if (!filteredGrievances || filteredGrievances.length === 0) return [];
+    const s = new Set();
+    filteredGrievances.forEach((g) => {
+      if (g.title) s.add(String(g.title));
+      if (g.description) s.add(String(g.description));
+      if (g.category) s.add(String(g.category));
+      // Accept multiple possible hostel field names
+      const hostelVal = g.hostelType || g.hostel_type || g.hostel;
+      if (hostelVal) s.add(String(hostelVal));
+    });
+    return Array.from(s);
+  }, [filteredGrievances]);
+
+  useBatchTranslate(
+    textsToTranslate,
+    Boolean(filteredGrievances && filteredGrievances.length > 0)
+  );
+
   const handleSubmit = async (data) => {
     console.log("🚀 handleSubmit called with data:", data);
 
@@ -174,7 +213,7 @@ const StudentDashboard = ({ user }) => {
 
       console.log("🚀 Sending complaint to Backend API:", payload);
 
-      const response = await fetch(`${API_BASE}/api/complaints/create`, {
+      const response = await fetch("http://localhost:5000/api/complaints/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -245,12 +284,17 @@ const StudentDashboard = ({ user }) => {
         <div className="breakdown-info">
           <h4>{t("category")}</h4>
           <div>
-            {Object.entries(
-              grievances.reduce((acc, g) => {
-                acc[g.category] = (acc[g.category] || 0) + 1;
+            {(() => {
+              const counts = grievances.reduce((acc, g) => {
+                const cat = g.category || "Uncategorized";
+                acc[cat] = (acc[cat] || 0) + 1;
                 return acc;
-              }, {})
-            ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A"}
+              }, {});
+              const topCategory =
+                Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+                "N/A";
+              return topCategory;
+            })()}
           </div>
         </div>
       </div>
@@ -318,9 +362,8 @@ const StudentDashboard = ({ user }) => {
             {t("pending")}
           </button>
           <button
-            className={`filter-btn ${
-              statusFilter === "In Progress" && "active"
-            }`}
+            className={`filter-btn ${statusFilter === "In Progress" && "active"
+              }`}
             onClick={() => setStatusFilter("In Progress")}
           >
             {t("in_progress")}
@@ -340,46 +383,148 @@ const StudentDashboard = ({ user }) => {
         </div>
       </div>
 
-      <div className="grievance-table">
-        <div className="table-header">
-          <div>ID</div>
-          <div>{t("title")}</div>
-          <div>{t("category")}</div>
-          <div>{t("date")}</div>
-          <div>{t("status")}</div>
-        </div>
+      {/* Grievances Cards */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
         {filteredGrievances.length === 0 ? (
-          <div className="empty-state">
-            <p>{t("no_complaints")}</p>
+          <div style={{ textAlign: "center", padding: "40px", color: "#6b7280", background: "white", borderRadius: "12px" }}>
+            <p style={{ fontSize: "1.2rem", marginBottom: "10px" }}>
+              <TranslatedText text="No complaints found" />
+            </p>
           </div>
         ) : (
-          filteredGrievances.map((g) => (
-            <div key={g.id} className="table-row">
-              <div>GR-{g.id.substring(0, 4)}</div>
-              <div>
-                <TranslatedText text={g.title} />
+          filteredGrievances.map((complaint) => {
+            // Get status colors
+            const getStatusBgColor = (status) => {
+              switch (status) {
+                case "Resolved": return "#d1fae5";
+                case "In Progress": return "#dbeafe";
+                case "Escalated": return "#fee2e2";
+                default: return "#fef3c7"; // Pending
+              }
+            };
+
+            const getStatusTextColor = (status) => {
+              switch (status) {
+                case "Resolved": return "#065f46";
+                case "In Progress": return "#1e40af";
+                case "Escalated": return "#991b1b";
+                default: return "#92400e"; // Pending
+              }
+            };
+
+            return (
+              <div
+                key={complaint.id}
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  padding: "18px",
+                  background: "white",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                  transition: "all 0.3s ease",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"}
+                onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)"}
+              >
+                {/* Title with speak button */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                  <h3 style={{ margin: 0, color: "#1f2937", fontSize: "1.1rem", fontWeight: "600", flex: 1 }}>
+                    <TranslatedText text={complaint.title} />
+                  </h3>
+                  <TranslatedSpeakButton text={`${complaint.title}. ${complaint.description}`} />
+                </div>
+
+                {/* Description */}
+                <p style={{ color: "#4b5563", margin: "0 0 12px 0", fontSize: "0.95rem", lineHeight: "1.5" }}>
+                  <TranslatedText text={complaint.description} />
+                </p>
+
+                {/* Horizontal separator */}
+                <div style={{
+                  height: "2px",
+                  background: complaint.status === "Resolved" ? "#10b981" : complaint.status === "Escalated" ? "#ef4444" : "#e5e7eb",
+                  marginBottom: "12px",
+                  borderRadius: "2px"
+                }} />
+
+                {/* Bottom row with badges */}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "10px"
+                }}>
+                  {/* Left side - badges */}
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", fontSize: "0.85rem" }}>
+                    {/* ID badge */}
+                    <span style={{
+                      background: "#f3f4f6",
+                      color: "#374151",
+                      padding: "4px 12px",
+                      borderRadius: "6px",
+                      fontWeight: "600",
+                      fontFamily: "monospace"
+                    }}>
+                      GR-{complaint.id.substring(0, 6)}
+                    </span>
+
+                    {/* Category badge */}
+                    <span style={{
+                      background: "#dbeafe",
+                      color: "#1e40af",
+                      padding: "4px 12px",
+                      borderRadius: "6px",
+                      fontWeight: "500",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}>
+                      📁 <TranslatedText text={complaint.category} />
+                    </span>
+
+                    {/* Status badge */}
+                    <span style={{
+                      background: getStatusBgColor(complaint.status),
+                      color: getStatusTextColor(complaint.status),
+                      padding: "4px 12px",
+                      borderRadius: "6px",
+                      fontWeight: "600"
+                    }}>
+                      <TranslatedText text={complaint.status} />
+                    </span>
+
+                    {/* Hostel Type badge (if available) */}
+                    {(complaint.hostelType || complaint.hostel_type || complaint.hostel) && (
+                      <span style={{
+                        background: "#f3e8ff",
+                        color: "#6b21a8",
+                        padding: "4px 12px",
+                        borderRadius: "6px",
+                        fontWeight: "500",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}>
+                        🏠 <TranslatedText text={complaint.hostelType || complaint.hostel_type || complaint.hostel} />
+                      </span>
+                    )}
+
+                    {/* Date */}
+                    <span style={{ color: "#6b7280", display: "flex", alignItems: "center", gap: "4px" }}>
+                      📅 {complaint.created_at?.toDate ? complaint.created_at.toDate().toLocaleDateString() :
+                        complaint.created_at instanceof Date ? complaint.created_at.toLocaleDateString() : "N/A"}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <TranslatedText text={g.category} />
-              </div>
-              <div>
-                {g.created_at?.toDate
-                  ? g.created_at.toDate().toLocaleDateString()
-                  : "-"}
-              </div>
-              <div>
-                <span
-                  className={`status-badge status-${g.status.toLowerCase()}`}
-                >
-                  <TranslatedText text={g.status} />
-                </span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
   );
+
 
   return (
     <div className="dashboard-container">
@@ -391,16 +536,8 @@ const StudentDashboard = ({ user }) => {
           <li className="sidebar-item">
             <button
               onClick={() => setActiveTab("summary")}
-              className={`sidebar-link ${
-                activeTab === "summary" ? "active" : ""
-              }`}
-              style={{
-                background: "none",
-                border: "none",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-              }}
+              className={`sidebar-link ${activeTab === "summary" ? "active" : ""}`}
+              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
             >
               <svg
                 className="sidebar-icon"
@@ -415,16 +552,8 @@ const StudentDashboard = ({ user }) => {
           <li className="sidebar-item">
             <button
               onClick={() => setActiveTab("submitGrievance")}
-              className={`sidebar-link ${
-                activeTab === "submitGrievance" ? "active" : ""
-              }`}
-              style={{
-                background: "none",
-                border: "none",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-              }}
+              className={`sidebar-link ${activeTab === "submitGrievance" ? "active" : ""}`}
+              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
             >
               <svg
                 className="sidebar-icon"
@@ -439,16 +568,8 @@ const StudentDashboard = ({ user }) => {
           <li className="sidebar-item">
             <button
               onClick={() => setActiveTab("myGrievances")}
-              className={`sidebar-link ${
-                activeTab === "myGrievances" ? "active" : ""
-              }`}
-              style={{
-                background: "none",
-                border: "none",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-              }}
+              className={`sidebar-link ${activeTab === "myGrievances" ? "active" : ""}`}
+              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
             >
               <svg
                 className="sidebar-icon"

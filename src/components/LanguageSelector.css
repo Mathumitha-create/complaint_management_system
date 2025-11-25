@@ -53,9 +53,10 @@
 }
 
 .language-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  /* use fixed positioning to escape ancestor stacking contexts */
+  position: fixed;
+  top: 0; /* will be overridden by inline style */
+  right: 0; /* will be overridden by inline style */
   width: 320px;
   max-width: 90vw;
   background: white;
@@ -66,7 +67,7 @@
   animation: slideDown 0.2s ease;
   display: flex;
   flex-direction: column;
-  z-index: 10000;
+  z-index: 99999; /* very high so dropdown appears above other UI elements */
 }
 
 @keyframes slideDown {
@@ -290,7 +291,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 999;
+  z-index: 99998; /* sit below dropdown but above page content */
   background: transparent;
 }
 

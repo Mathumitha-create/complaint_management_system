@@ -17,6 +17,7 @@ const Signup = ({ onBackToLogin }) => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [registerNumber, setRegisterNumber] = useState("");
   const [hostelType, setHostelType] = useState("");
+  const [residency, setResidency] = useState("dayScholar");
   // Force role to student; other roles cannot self-register
   const [role] = useState("student");
   const [error, setError] = useState(null);
@@ -41,8 +42,8 @@ const Signup = ({ onBackToLogin }) => {
       return;
     }
 
-    // Hostel type required for students (only self-registerable role now)
-    if (!hostelType) {
+    // If student is a hosteller, hostel type is required
+    if (residency === "hosteller" && !hostelType) {
       setError("Please select your hostel type");
       setLoading(false);
       return;
@@ -61,7 +62,8 @@ const Signup = ({ onBackToLogin }) => {
         email: user.email,
         role: role,
         registerNumber: registerNumber || "",
-        hostelType: hostelType,
+        residency: residency,
+        hostelType: residency === "hosteller" ? hostelType : "",
         createdAt: new Date(),
       });
 
@@ -94,7 +96,8 @@ const Signup = ({ onBackToLogin }) => {
         body: JSON.stringify({
           idToken,
           role, // Pass selected role
-          hostelType, // Pass selected hostel type
+          residency,
+          hostelType: residency === "hosteller" ? hostelType : "",
         }),
       });
 
@@ -282,7 +285,7 @@ const Signup = ({ onBackToLogin }) => {
             />
           </div>
 
-          <div style={{ marginBottom: "1.25rem" }}>
+          <div style={{ marginBottom: "1rem" }}>
             <label
               style={{
                 display: "block",
@@ -292,30 +295,83 @@ const Signup = ({ onBackToLogin }) => {
                 fontWeight: "600",
               }}
             >
-              Hostel Type <span style={{ color: "#dc2626" }}>*</span>
+              Student Type <span style={{ color: "#dc2626" }}>*</span>
             </label>
-            <select
-              value={hostelType}
-              onChange={(e) => setHostelType(e.target.value)}
-              required
-              style={{
-                width: "100%",
-                padding: "0.75rem 1rem",
-                border: "2px solid #e2e8f0",
-                borderRadius: "10px",
-                fontSize: "0.95rem",
-                transition: "border-color 0.2s",
-                backgroundColor: "#f8fafc",
-                cursor: "pointer",
-              }}
-              onFocus={(e) => (e.target.style.borderColor = "#667eea")}
-              onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
-            >
-              <option value="">Select Hostel Type</option>
-              <option value="boys">Boys Hostel</option>
-              <option value="girls">Girls Hostel</option>
-            </select>
+            <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  color: "#475569",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="residency"
+                  value="dayScholar"
+                  checked={residency === "dayScholar"}
+                  onChange={() => setResidency("dayScholar")}
+                />
+                <span style={{ fontSize: "0.95rem" }}>Day Scholar</span>
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  color: "#475569",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="residency"
+                  value="hosteller"
+                  checked={residency === "hosteller"}
+                  onChange={() => setResidency("hosteller")}
+                />
+                <span style={{ fontSize: "0.95rem" }}>Hosteller</span>
+              </label>
+            </div>
           </div>
+
+          {residency === "hosteller" && (
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: "0.5rem",
+                  color: "#475569",
+                  fontSize: "0.875rem",
+                  fontWeight: "600",
+                }}
+              >
+                Hostel Type <span style={{ color: "#dc2626" }}>*</span>
+              </label>
+              <select
+                value={hostelType}
+                onChange={(e) => setHostelType(e.target.value)}
+                required={residency === "hosteller"}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 1rem",
+                  border: "2px solid #e2e8f0",
+                  borderRadius: "10px",
+                  fontSize: "0.95rem",
+                  transition: "border-color 0.2s",
+                  backgroundColor: "#f8fafc",
+                  cursor: "pointer",
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#667eea")}
+                onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
+              >
+                <option value="">Select Hostel Type</option>
+                <option value="boys">Boys Hostel</option>
+                <option value="girls">Girls Hostel</option>
+              </select>
+            </div>
+          )}
 
           <div style={{ marginBottom: "1.25rem", position: "relative" }}>
             <label

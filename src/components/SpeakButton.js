@@ -7,8 +7,29 @@ import "./SpeakButton.css";
 const SpeakButton = ({ text, className = "" }) => {
   const { currentLanguage } = useLanguage();
   const [isPlaying, setIsPlaying] = useState(false);
+  // Normalize incoming text to a string to avoid objects/JSX being passed
+  const normalizedText = React.useMemo(() => {
+    try {
+      if (text === null || text === undefined) return "";
+      if (typeof text === "string") return text;
+      if (typeof text === "number" || typeof text === "boolean")
+        return String(text);
+      // If it's an object (e.g. might accidentally be a React node), try to extract `props.children` or stringify
+      if (typeof text === "object") {
+        // Try common shapes
+        if (text.props && text.props.children)
+          return String(text.props.children);
+        return JSON.stringify(text);
+      }
+      return String(text);
+    } catch (e) {
+      return String(text || "");
+    }
+  }, [text]);
+
   // Get translated text (if user selected a non-English language)
-  const { translatedText, isLoading: isTranslating } = useTranslatedText(text);
+  const { translatedText, isLoading: isTranslating } =
+    useTranslatedText(normalizedText);
   const [error, setError] = useState(null);
   const [speakingRequested, setSpeakingRequested] = useState(false);
 
@@ -35,6 +56,11 @@ const SpeakButton = ({ text, className = "" }) => {
   };
 
   const handleSpeak = () => {
+    console.log(
+      "🔔 SpeakButton clicked.",
+      currentLanguage,
+      normalizedText ? normalizedText.slice(0, 100) : "(no text)"
+    );
     // Check if browser supports Speech Synthesis
     if (!("speechSynthesis" in window)) {
       setError("Text-to-Speech is not supported in your browser");
@@ -54,16 +80,17 @@ const SpeakButton = ({ text, className = "" }) => {
     // Stop any ongoing speech
     window.speechSynthesis.cancel();
 
-    if (!text || text.trim() === "") {
+    if (!normalizedText || normalizedText.trim() === "") {
       console.warn("No text to speak");
+      setError("No text provided");
+      return;
     }
 
     // If translation is still in progress, mark request and wait for it to finish
     if (isTranslating) {
       setSpeakingRequested(true);
       // voices may still be loading; ensure voicesReady will trigger speak when ready
-      ensureVoicesLoaded()
-        .catch(() => { });
+      ensureVoicesLoaded().catch(() => {});
       return;
     }
 
@@ -120,7 +147,7 @@ const SpeakButton = ({ text, className = "" }) => {
               "voiceschanged",
               handler
             );
-          } catch (e) { }
+          } catch (e) {}
           resolve(again);
         }
       }, 250);
@@ -132,7 +159,9 @@ const SpeakButton = ({ text, className = "" }) => {
     try {
       // Choose the text to speak: prefer translated text if available
       const finalText =
-        translatedText && translatedText.trim() !== "" ? translatedText : text;
+        translatedText && translatedText.trim() !== ""
+          ? translatedText
+          : normalizedText;
       // If user requested speaking while translation was pending, clear the flag
       if (speakingRequested) setSpeakingRequested(false);
       // Set language
@@ -143,6 +172,7 @@ const SpeakButton = ({ text, className = "" }) => {
       console.log("🔊 Available voices:", voices.length);
       console.log("🔊 Current language code:", currentLanguage);
       console.log("🔊 Looking for voice with locale:", lang);
+      console.log("🔊 Final text length:", finalText ? finalText.length : 0);
 
       // List all available voices for debugging
       voices.forEach((v) => console.log(`  - ${v.name} (${v.lang})`));
@@ -226,7 +256,10 @@ const SpeakButton = ({ text, className = "" }) => {
       // Event handlers
       utterance.onstart = () => {
         setIsPlaying(true);
-        console.log("🔊 Started speaking:", text.substring(0, 50) + "...");
+        console.log(
+          "🔊 Started speaking:",
+          normalizedText.substring(0, 50) + "..."
+        );
       };
 
       utterance.onend = () => {
@@ -244,7 +277,7 @@ const SpeakButton = ({ text, className = "" }) => {
       };
 
       // Speak the text
-      console.log("🔊 Speaking text:", finalText);
+      console.log("🔊 Speaking text:", finalText.slice(0, 200));
       window.speechSynthesis.speak(utterance);
     } catch (err) {
       console.error("Speech error:", err);

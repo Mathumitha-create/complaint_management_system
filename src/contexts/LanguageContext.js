@@ -1,23 +1,23 @@
 // Language Context for managing multi-language support
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from "react";
 
 const LanguageContext = createContext();
 
 export const useLanguage = () => {
   const context = useContext(LanguageContext);
   if (!context) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
+    throw new Error("useLanguage must be used within a LanguageProvider");
   }
   return context;
 };
 
 export const LanguageProvider = ({ children }) => {
-  const [currentLanguage, setCurrentLanguage] = useState('en');
+  const [currentLanguage, setCurrentLanguage] = useState("en");
   const [translationCache, setTranslationCache] = useState({});
 
   // Load saved language preference from localStorage
   useEffect(() => {
-    const savedLanguage = localStorage.getItem('preferredLanguage');
+    const savedLanguage = localStorage.getItem("preferredLanguage");
     if (savedLanguage) {
       setCurrentLanguage(savedLanguage);
     }
@@ -26,21 +26,25 @@ export const LanguageProvider = ({ children }) => {
   // Save language preference to localStorage
   const changeLanguage = (languageCode) => {
     setCurrentLanguage(languageCode);
-    localStorage.setItem('preferredLanguage', languageCode);
+    localStorage.setItem("preferredLanguage", languageCode);
   };
 
   // Cache translation to avoid repeated API calls
   const cacheTranslation = (text, targetLang, translatedText) => {
-    const key = `${text}_${targetLang}`;
-    setTranslationCache(prev => ({
+    const raw = (text || "").toString();
+    const normalized = raw.trim();
+    const key = `${normalized}_${targetLang}`;
+    setTranslationCache((prev) => ({
       ...prev,
-      [key]: translatedText
+      [key]: translatedText,
     }));
   };
 
   // Get cached translation
   const getCachedTranslation = (text, targetLang) => {
-    const key = `${text}_${targetLang}`;
+    const raw = (text || "").toString();
+    const normalized = raw.trim();
+    const key = `${normalized}_${targetLang}`;
     return translationCache[key];
   };
 
@@ -48,7 +52,7 @@ export const LanguageProvider = ({ children }) => {
     currentLanguage,
     changeLanguage,
     cacheTranslation,
-    getCachedTranslation
+    getCachedTranslation,
   };
 
   return (

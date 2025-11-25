@@ -19,6 +19,8 @@ const GrievanceForm = ({ onSubmit }) => {
   const [category, setCategory] = useState("");
   const [hostelType, setHostelType] = useState("");
   const [expectedDuration, setExpectedDuration] = useState("");
+  const [customResolutionDays, setCustomResolutionDays] = useState(0);
+  const [customResolutionHours, setCustomResolutionHours] = useState(0);
   const [attachment, setAttachment] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -387,7 +389,12 @@ const GrievanceForm = ({ onSubmit }) => {
     console.log("📝 GrievanceForm handleSubmit triggered");
 
     // Validate form
-    if (!title.trim() || !description.trim() || !category || !expectedDuration) {
+    if (
+      !title.trim() ||
+      !description.trim() ||
+      !category ||
+      !expectedDuration
+    ) {
       console.warn("⚠️ Validation failed: Missing fields");
       setErrorMessage("Please fill in all required fields.");
       return;
@@ -399,22 +406,63 @@ const GrievanceForm = ({ onSubmit }) => {
       return;
     }
 
+    // Validate custom inputs if Custom selected
+    if (expectedDuration === "Custom") {
+      if (!(customResolutionDays > 0 || customResolutionHours > 0)) {
+        setErrorMessage(
+          "Please provide a valid custom resolution time (days and/or hours)."
+        );
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
-      console.log("🚀 Calling parent onSubmit...");
-      const result = await onSubmit({
+      console.log("🚀 Preparing payload and calling parent onSubmit...");
+
+      // Compute integer resolutionTime (in days) expected by backend
+      let resolutionTime = 1; // default min 1 day
+      if (expectedDuration === "Custom") {
+        const totalDays =
+          (customResolutionDays || 0) + (customResolutionHours || 0) / 24;
+        resolutionTime = Math.max(1, Math.ceil(totalDays));
+      } else if (expectedDuration.includes("24")) {
+        resolutionTime = 1;
+      } else if (expectedDuration.includes("3")) {
+        resolutionTime = 3;
+      } else if (
+        expectedDuration.toLowerCase().includes("week") ||
+        expectedDuration.includes("1 Week")
+      ) {
+        resolutionTime = 7;
+      } else if (
+        expectedDuration.toLowerCase().includes("flexible") ||
+        expectedDuration === "Low (Flexible)"
+      ) {
+        resolutionTime = 14; // treat flexible as 2 weeks by default
+      }
+
+      const payload = {
         title,
         description,
         category,
         hostelType,
         expectedDuration,
+        resolutionTime,
+        customResolutionDays: customResolutionDays || 0,
+        customResolutionHours: customResolutionHours || 0,
         attachment,
-      });
+      };
+
+      console.log("📦 Payload:", payload);
+
+      const result = await onSubmit(payload);
       console.log("✅ Parent onSubmit returned:", result);
 
       if (!result || !result.success) {
-        const errMsg = result?.error || "Submission failed with no error message.";
+        const errMsg =
+          result?.error || "Submission failed with no error message.";
         console.warn("⚠️ Submission reported failure:", errMsg);
         setErrorMessage(errMsg);
         return; // do not proceed to success reset
@@ -435,6 +483,8 @@ const GrievanceForm = ({ onSubmit }) => {
       setCategory("");
       setHostelType("");
       setExpectedDuration("");
+      setCustomResolutionDays(0);
+      setCustomResolutionHours(0);
       setAttachment(null);
       setErrorMessage("");
 
@@ -443,7 +493,9 @@ const GrievanceForm = ({ onSubmit }) => {
       if (fileInput) fileInput.value = "";
     } catch (error) {
       console.error("Error submitting grievance (exception):", error);
-      setErrorMessage("Failed to submit: " + (error.message || "Unknown error"));
+      setErrorMessage(
+        "Failed to submit: " + (error.message || "Unknown error")
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -467,15 +519,17 @@ const GrievanceForm = ({ onSubmit }) => {
       </div>
       <form onSubmit={handleSubmit}>
         {errorMessage && (
-          <div style={{
-            padding: "10px",
-            marginBottom: "15px",
-            backgroundColor: "#fee2e2",
-            color: "#dc2626",
-            borderRadius: "8px",
-            border: "1px solid #fecaca",
-            fontSize: "0.9rem"
-          }}>
+          <div
+            style={{
+              padding: "10px",
+              marginBottom: "15px",
+              backgroundColor: "#fee2e2",
+              color: "#dc2626",
+              borderRadius: "8px",
+              border: "1px solid #fecaca",
+              fontSize: "0.9rem",
+            }}
+          >
             ⚠️ {errorMessage}
           </div>
         )}
@@ -588,8 +642,42 @@ const GrievanceForm = ({ onSubmit }) => {
             <option value="High (3 Days)">High (Within 3 Days)</option>
             <option value="Normal (1 Week)">Normal (Within 1 Week)</option>
             <option value="Low (Flexible)">Low (Flexible)</option>
+            <option value="Custom">Custom (Days + Hours)</option>
           </select>
         </div>
+
+        {expectedDuration === "Custom" && (
+          <div className="form-group">
+            <label>Custom Resolution Time</label>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                type="number"
+                min="0"
+                value={customResolutionDays}
+                onChange={(e) =>
+                  setCustomResolutionDays(parseInt(e.target.value || 0, 10))
+                }
+                className="form-input"
+                placeholder="Days"
+              />
+              <input
+                type="number"
+                min="0"
+                max="23"
+                value={customResolutionHours}
+                onChange={(e) =>
+                  setCustomResolutionHours(parseInt(e.target.value || 0, 10))
+                }
+                className="form-input"
+                placeholder="Hours"
+              />
+            </div>
+            <small>
+              Provide days and hours for the expected resolution (e.g., 2 days 6
+              hours).
+            </small>
+          </div>
+        )}
 
         <div className="form-group">
           <label>{t("attach_files")}</label>
