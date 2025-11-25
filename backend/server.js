@@ -22,6 +22,7 @@ emailService.verifyConnection();
 const allowedOrigins = [
   "http://localhost:3000",
   "https://complaint-management-system-beta.vercel.app",
+  "https://complaint-management-system-g6kl.vercel.app"
 ];
 
 app.use(
