@@ -1,119 +1,71 @@
-// Login component using Backend Verification
 import React, { useState } from "react";
 import { auth } from "../firebase";
-import API_BASE from "../config";
 import {
-  signInWithCustomToken,
+  signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
 import "./login.css";
 
 const Login = ({ onShowSignup }) => {
-  const [selectedRole, setSelectedRole] = useState("student"); // Default to student
+  const [selectedRole, setSelectedRole] = useState("student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Handle Google Login
+  // ----------------------------
+  // GOOGLE LOGIN (Firebase Only)
+  // ----------------------------
   const handleGoogleLogin = async () => {
     setError(null);
     setLoading(true);
+
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
+      await signInWithPopup(auth, provider);
 
-      console.log("🔐 Google Sign-In successful. Verifying with backend...");
-
-      // Call Backend API to Verify Google Token & Get Role
-      const response = await fetch(`${API_BASE}/api/auth/google`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Google Login failed");
-      }
-
-      console.log("✅ Backend verification successful. Role:", data.user.role);
-
-      // Reload to let App.js handle the new auth state and redirection
+      console.log("✅ Google Login success");
       window.location.reload();
     } catch (err) {
       console.error("❌ Google Login Error:", err);
       setError(err.message);
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
-  // Handle Login Submission
+  // --------------------------------------
+  // EMAIL + PASSWORD LOGIN (Firebase Only)
+  // --------------------------------------
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      console.log(`🔐 Attempting login as ${selectedRole}...`);
+      console.log("🔐 Firebase login attempt...");
 
-      // 1. Call Backend API to Verify Credentials & Role
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          selectedRole,
-        }),
-      });
+      await signInWithEmailAndPassword(auth, email, password);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      console.log("✅ Backend verification successful. Signing in...");
-
-      // 2. Sign in with Custom Token from Backend
-      await signInWithCustomToken(auth, data.token);
-
-      // 3. Redirect based on Role
-      const role = data.user.role;
-      console.log("🚀 Redirecting to dashboard for role:", role);
-
-      // Since we're not using React Router, just reload the page
-      // The auth state will handle showing the correct dashboard
+      console.log("✅ Firebase email login success");
       window.location.reload();
     } catch (err) {
       console.error("❌ Login Error:", err);
       setError(err.message);
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
   return (
     <div className="login-container">
-      <div
-        className="login-card"
-        style={{ maxWidth: "500px", padding: "2.5rem" }}
-      >
+      <div className="login-card" style={{ maxWidth: "500px", padding: "2.5rem" }}>
+
         {/* Header */}
         <div style={{ marginBottom: "2rem", textAlign: "center" }}>
-          <h2
-            style={{
-              fontSize: "2rem",
-              fontWeight: "700",
-              color: "#1e293b",
-              marginBottom: "0.5rem",
-            }}
-          >
+          <h2 style={{ fontSize: "2rem", fontWeight: "700", color: "#1e293b" }}>
             Welcome Back
           </h2>
           <p style={{ color: "#64748b", fontSize: "0.95rem" }}>
@@ -121,6 +73,7 @@ const Login = ({ onShowSignup }) => {
           </p>
         </div>
 
+        {/* Error Box */}
         {error && (
           <div
             style={{
@@ -141,19 +94,13 @@ const Login = ({ onShowSignup }) => {
           </div>
         )}
 
+        {/* Login Form */}
         <form onSubmit={handleLogin}>
-          {/* Role Selection */}
+
+          {/* Role Selection (only UI, not backend) */}
           <div style={{ marginBottom: "1.25rem" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.5rem",
-                color: "#475569",
-                fontSize: "0.875rem",
-                fontWeight: "600",
-              }}
-            >
-              Select Role <span style={{ color: "#dc2626" }}>*</span>
+            <label style={{ fontSize: "0.875rem", fontWeight: "600", color: "#475569" }}>
+              Select Role <span style={{ color: "red" }}>*</span>
             </label>
             <select
               value={selectedRole}
@@ -165,17 +112,8 @@ const Login = ({ onShowSignup }) => {
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
                 fontSize: "0.95rem",
-                transition: "border-color 0.2s",
                 backgroundColor: "#f8fafc",
-                cursor: "pointer",
-                appearance: "none",
-                backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                backgroundPosition: "right 0.5rem center",
-                backgroundRepeat: "no-repeat",
-                backgroundSize: "1.5em 1.5em",
               }}
-              onFocus={(e) => (e.target.style.borderColor = "#667eea")}
-              onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
             >
               <option value="student">Student</option>
               <option value="warden_girls">Girls Hostel Warden</option>
@@ -187,18 +125,10 @@ const Login = ({ onShowSignup }) => {
             </select>
           </div>
 
-          {/* Email Field */}
+          {/* Email */}
           <div style={{ marginBottom: "1.25rem" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.5rem",
-                color: "#475569",
-                fontSize: "0.875rem",
-                fontWeight: "600",
-              }}
-            >
-              Email Address <span style={{ color: "#dc2626" }}>*</span>
+            <label style={{ fontSize: "0.875rem", fontWeight: "600", color: "#475569" }}>
+              Email Address <span style={{ color: "red" }}>*</span>
             </label>
             <input
               type="email"
@@ -211,28 +141,16 @@ const Login = ({ onShowSignup }) => {
                 padding: "0.75rem 1rem",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
-                fontSize: "0.95rem",
-                transition: "border-color 0.2s",
-                backgroundColor: "#f8fafc",
               }}
-              onFocus={(e) => (e.target.style.borderColor = "#667eea")}
-              onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
             />
           </div>
 
-          {/* Password Field */}
+          {/* Password */}
           <div style={{ marginBottom: "1.5rem", position: "relative" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "0.5rem",
-                color: "#475569",
-                fontSize: "0.875rem",
-                fontWeight: "600",
-              }}
-            >
-              Password <span style={{ color: "#dc2626" }}>*</span>
+            <label style={{ fontSize: "0.875rem", fontWeight: "600", color: "#475569" }}>
+              Password <span style={{ color: "red" }}>*</span>
             </label>
+
             <input
               type={showPassword ? "text" : "password"}
               placeholder="Enter your password"
@@ -245,13 +163,9 @@ const Login = ({ onShowSignup }) => {
                 paddingRight: "3rem",
                 border: "2px solid #e2e8f0",
                 borderRadius: "10px",
-                fontSize: "0.95rem",
-                transition: "border-color 0.2s",
-                backgroundColor: "#f8fafc",
               }}
-              onFocus={(e) => (e.target.style.borderColor = "#667eea")}
-              onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
             />
+
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -261,9 +175,9 @@ const Login = ({ onShowSignup }) => {
                 top: "2.25rem",
                 background: "none",
                 border: "none",
+                fontSize: "1.25rem",
                 cursor: "pointer",
                 color: "#94a3b8",
-                fontSize: "1.25rem",
               }}
             >
               {showPassword ? "👁️" : "👁️‍🗨️"}
@@ -284,23 +198,7 @@ const Login = ({ onShowSignup }) => {
               fontSize: "1rem",
               fontWeight: "600",
               cursor: "pointer",
-              transition: "transform 0.2s, box-shadow 0.2s",
-              boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
               opacity: loading ? 0.7 : 1,
-            }}
-            onMouseOver={(e) => {
-              if (!loading) {
-                e.target.style.transform = "translateY(-2px)";
-                e.target.style.boxShadow =
-                  "0 6px 16px rgba(102, 126, 234, 0.4)";
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!loading) {
-                e.target.style.transform = "translateY(0)";
-                e.target.style.boxShadow =
-                  "0 4px 12px rgba(102, 126, 234, 0.3)";
-              }
             }}
           >
             {loading ? "Verifying..." : "Sign In"}
@@ -322,30 +220,24 @@ const Login = ({ onShowSignup }) => {
           <div style={{ flex: 1, height: "1px", background: "#e2e8f0" }}></div>
         </div>
 
-        {/* Google Sign-In Button */}
+        {/* Google Login */}
         <button
           type="button"
-          onClick={handleGoogleLogin}
           disabled={loading}
+          onClick={handleGoogleLogin}
           style={{
             width: "100%",
             padding: "0.75rem",
             background: "#fff",
-            color: "#333",
             border: "1px solid #e2e8f0",
             borderRadius: "10px",
             fontSize: "0.95rem",
             fontWeight: "600",
-            cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "10px",
-            transition: "all 0.2s",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
           }}
-          onMouseOver={(e) => (e.target.style.backgroundColor = "#f8fafc")}
-          onMouseOut={(e) => (e.target.style.backgroundColor = "#fff")}
         >
           <img
             src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
@@ -355,7 +247,7 @@ const Login = ({ onShowSignup }) => {
           Continue with Google
         </button>
 
-        {/* Signup Link visible only for student role */}
+        {/* Show Signup only for students */}
         {selectedRole === "student" && (
           <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
             <p style={{ color: "#64748b", fontSize: "0.9rem" }}>
@@ -368,7 +260,6 @@ const Login = ({ onShowSignup }) => {
                   border: "none",
                   color: "#667eea",
                   fontWeight: "600",
-                  cursor: "pointer",
                   textDecoration: "underline",
                 }}
               >
